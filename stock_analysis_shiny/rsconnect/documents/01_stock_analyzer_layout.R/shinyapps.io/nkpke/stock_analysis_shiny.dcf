@@ -1,0 +1,13 @@
+name: stock_analysis_shiny
+title: stock_analysis_shiny
+username:
+account: nkpke
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9344718
+bundleId: 7372522
+url: https://nkpke.shinyapps.io/stock_analysis_shiny/
+when: 1687378287.75677
+lastSyncTime: 1687378287.75679
+asMultiple: FALSE
+asStatic: FALSE
