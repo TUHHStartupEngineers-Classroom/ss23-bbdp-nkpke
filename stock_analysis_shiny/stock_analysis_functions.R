@@ -13,7 +13,7 @@ function(stock_index = "DAX") {
     # Control for different currencies and different column namings in wiki
     vars <- switch(index_lower,
                    dax    = list(wiki     = "DAX", 
-                                 columns  = c("Ticker symbol", "Company")),
+                                 columns  = c("Ticker", "Company")),
                    sp500  = list(wiki     = "List_of_S%26P_500_companies", 
                                  columns  = c("Symbol", "Security")),
                    dow    = list(wiki     = "Dow_Jones_Industrial_Average",
@@ -93,7 +93,7 @@ function(stock_data) {
      # ggplot
      ggplot(aes(x = date, y = value, color = legend, group = legend)) +
      geom_line(aes(linetype = legend)) +
-     scale_y_continuous(labels = stock_data_tbl %>% pull(currency) %>% first() %>% currency_format()) +
+     scale_y_continuous(labels = stock_data %>% pull(currency) %>% first() %>% currency_format()) +
      
      # Add theme possibly: theme_...
      # Add colors possibly: scale_color_..
@@ -122,8 +122,8 @@ function(data, user_input) {
     mutate(mavg_warning_flag = mavg_short<mavg_long) %>% # insert the logical expression
     pull(mavg_warning_flag)
 
-    n_short <- stock_data_tbl %>% pull(mavg_short) %>% is.na() %>% sum() + 1
-    n_long  <- stock_data_tbl %>% pull(mavg_long) %>% is.na() %>% sum() + 1
+    n_short <- data %>% pull(mavg_short) %>% is.na() %>% sum() + 1
+    n_long  <- data %>% pull(mavg_long) %>% is.na() %>% sum() + 1
 
     if (warning_signal) {
         str_glue("In reviewing the stock prices of {user_input}, the {n_short}-day moving average is below the {n_long}-day moving average, indicating negative trends")

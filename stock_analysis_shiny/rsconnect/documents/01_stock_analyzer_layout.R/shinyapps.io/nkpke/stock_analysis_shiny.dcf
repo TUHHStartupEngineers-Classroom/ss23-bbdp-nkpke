@@ -5,9 +5,9 @@ account: nkpke
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 9344718
-bundleId: 7372522
+bundleId: 7454093
 url: https://nkpke.shinyapps.io/stock_analysis_shiny/
-when: 1687378287.75677
-lastSyncTime: 1687378287.75679
+when: 1689279427.49231
+lastSyncTime: 1689279427.49233
 asMultiple: FALSE
 asStatic: FALSE

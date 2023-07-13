@@ -18,7 +18,6 @@ library(glue)
 
 source(file = "stock_analysis_functions.R")
 
-stock_list_tbl <- get_stock_list("DOW")
 
 # UI ----
 ui <- fluidPage(
@@ -36,8 +35,13 @@ div(
   column(
     width = 4,
     wellPanel(
-    # Add content here 
-    pickerInput(inputId = "stock_selection", choices = stock_list_tbl$label),
+    # index selection
+    # title
+    h4("Select Stock Index"),
+    # picker
+    pickerInput(inputId = "index_selection", choices = c("DOW", "DAX", "SP500", "NASDAQ")),
+    # stock selection
+    uiOutput("indices"), # only stock from selected index are shown (computation in server)
     # data range selection
     dateRangeInput(inputId = "date_range", label = "Date Range", start = today() - days(180), end = today()),
     # Add analyze button
@@ -73,6 +77,24 @@ div(
 
 # SERVER ----
 server <- function(input, output, session) {
+      # Get Stock List
+    stock_list_tbl <- eventReactive(input$index_selection, {
+      get_stock_list(input$index_selection)
+      
+    })
+    
+    # Stock Symbol ----
+    stock_symbol <- eventReactive(input$analyze, {
+      input$stock_selection 
+    })
+    
+    output$selected_symbol <- renderText({stock_symbol()})
+    output$plot_header <- renderText(stock_symbol())
+  
+    # Create stock list ----    
+    output$indices <- renderUI({
+        choices = stock_list_tbl() %>% purrr::pluck("label")
+        pickerInput(inputId = "stock_selection", label = "Select Stock", choices = choices)})
     # Stock symbol the user has selected
     stock_symbol <- eventReactive(input$analyze, {
         input$stock_selection %>% 
@@ -89,12 +111,10 @@ server <- function(input, output, session) {
     # Get Stock Data ----
     stock_data_tbl <- reactive({
       stock_symbol() %>% 
-            get_stock_data(from = today() - days(180), 
-                           to   = today(),
-                           mavg_short = 20,
-                           mavg_long  = 50)
-
-    })
+            get_stock_data(from = input$date_range[1],
+                               to = input$date_range[2],
+                               mavg_short = input$mavg_short,
+                               mavg_long = input$mavg_long)})
 
     output$stock_data <- renderPrint({stock_data_tbl()})
 
