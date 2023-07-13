@@ -1,0 +1,225 @@
+---
+title: "Sales Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+# Shiny
+library(flexdashboard)
+library(shiny)
+library(DT)
+library(rsconnect)
+
+# Core
+library(tidyverse)
+library(lubridate)
+
+# Interactive Visualizations
+library(plotly)
+
+# Spatial Data
+library(raster)
+library(sf)
+
+# Currency formatting
+source("plot_sales.R")
+```
+
+```{r}
+# Bike data
+bikes_tbl      <- readRDS("bikes_tbl.rds")
+bikeshops_tbl  <- readRDS("bikeshops_tbl.rds")
+orderlines_tbl <- readRDS("orderlines_tbl.rds")
+
+bike_orderlines_tbl <- orderlines_tbl %>%
+    left_join(bikes_tbl,     by = c("product_id" = "bike_id")) %>%
+    left_join(bikeshops_tbl, by = c("customer_id" = "bikeshop_id")) %>%
+    mutate(total_price = price_euro * quantity)
+
+
+# German spatial data
+germany_sp <- getData('GADM', country='DE', level=1) 
+germany_sf <- st_as_sf(germany_sp) %>% 
+  
+                  # Add english names
+                  mutate(VARNAME_1 = ifelse(is.na(VARNAME_1), NAME_1, VARNAME_1)) 
+```
+
+Sidebar {.sidebar}
+------------------------
+
+```{r}
+# Inputs
+checkboxGroupInput(inputId = "bike_type", 
+                   label   = h4("Bike Type"), 
+                   choices = c("Mountain" = "Mountain",
+                               "Road"       = "Road",
+                               "E-Bikes"       = "E-Bikes",
+                               "Gravel"       = "Gravel",
+                               "Hybrid / City"     = "Hybrid / City"), 
+                   selected = c("Mountain", "Road", "E-Bikes", "Gravel", "Hybrid / City"))
+
+checkboxGroupInput(inputId = "bike_family", 
+                   label   = h4("Bike Family"), 
+                   choices = c("Trail" = "Trail",
+                                "Race" = "Race",
+                                "Triathlon Bike" = "Triathlon Bike",
+                                "Dirt Jump" = "Dirt Jump",
+                                "City" = "City",
+                                "Cyclocross" = "Cyclocross",
+                                "Enduro" = "Enduro",
+                                "E-Mountain" = "E-Mountain",
+                                "All-Road" = "All-Road",
+                                "Endurance" = "Endurance",
+                                "E-City" = "E-City",
+                                "Cross-Country" = "Cross-Country",
+                                "Touring" = "Touring",
+                                "E-Gravel" = "E-Gravel",
+                                "Adventure" = "Adventure",
+                                "Downhill" = "Downhill",
+                                "Fat Bikes" = "Fat Bikes",
+                                "E-Fitness" = "E-Fitness",
+                                "E-Trekking" = "E-Trekking",
+                                "E-Road" = "E-Road"), 
+                   selected = c("Trail", "Race", "Adventure", "Cyclocross", "Endurance"))
+
+
+dateRangeInput(inputId = "date_range", 
+               label   = h4("Date Range"), 
+               start   = min(bike_orderlines_tbl$order_date), 
+               end     = max(bike_orderlines_tbl$order_date),
+               min     = min(bike_orderlines_tbl$order_date), 
+               max     = max(bike_orderlines_tbl$order_date), 
+               startview = "year")
+
+sliderInput(inputId = "slider_input", 
+            label   = h4("Price Range"), 
+            min     = min(bike_orderlines_tbl$price_euro),
+            max     = max(bike_orderlines_tbl$price_euro),
+            value   = c(1000, 5000),
+            step    = 10)
+```
+
+
+```{r}
+# Reset Button
+actionButton(inputId = "reset", 
+             label   = "Reset", 
+             icon    = icon("sync"))
+
+observeEvent(eventExpr = input$reset, handlerExpr = {
+  updateCheckboxGroupInput(session  = session, 
+                           inputId  = "bike_type", 
+                           selected = c("Mountain", "Road", "E-Bikes", "Gravel", "Hybrid / City"))
+  
+  updateCheckboxGroupInput(session  = session, 
+                           inputId  = "bike_family", 
+                           selected = c("Trail", "Race", "Adventure", "Cyclocross", "Endurance"))
+  
+  updateDateRangeInput(session = session, 
+                       inputId = "date_range", 
+                       start   = min(bike_orderlines_tbl$order_date), 
+                       end     = max(bike_orderlines_tbl$order_date))
+
+  updateSliderInput(session = session, 
+                    inputId = "slider_input", 
+            value   = c(1000, 5000))
+})
+```
+
+Column {data-width=500}
+---------------------------------------------------------------
+
+### By State
+
+```{r}
+# filter bike_orderlines_tbl reactive
+bike_orderlines_tbl_filtered <- reactive({bike_orderlines_tbl %>% 
+                  filter(order_date >= input$date_range[1],
+                         order_date <= input$date_range[2],
+                         price_euro >= input$slider_input[1],
+                         price_euro <= input$slider_input[2],
+                         category_1 %in% input$bike_type,
+                         category_2 %in% input$bike_family)})
+```
+
+```{r}
+# groub by state
+geo_plot_tbl <- reactive({bike_orderlines_tbl_filtered() %>% group_by(state)%>%
+                  summarise(total_revenue = sum(total_price)) %>%
+                  ungroup() %>%
+                  right_join(germany_sf, by = c("state" = "VARNAME_1")) %>% 
+                  mutate(total_revenue = ifelse(is.na(total_revenue), 0, total_revenue)) %>% 
+                  mutate(label_text = str_glue("State: {state}
+                                         Revenue: {format_to_euro(total_revenue)}")) %>% 
+                  st_as_sf()})
+```
+
+
+```{r}
+# Plot
+geoPlot <- reactive({plot_ly(geo_plot_tbl(), 
+                             split      = ~NAME_1, 
+                             color      = ~total_revenue,
+                             colors     = "Blues",
+                             stroke     = I("black"),
+                             hoverinfo  = 'text', 
+                             text       = ~label_text, 
+                             hoveron    = "fills", 
+                             showlegend = FALSE)})
+```
+
+```{r}
+# Render Plot
+renderPlotly(geoPlot())
+```
+
+
+
+
+Column {data-width=500}
+---------------------------------------------------------------
+
+### Over Time
+
+```{r}
+# get list of different entries in category_1
+
+
+# reactive table
+filtered_tbl <- reactive({
+  bike_orderlines_tbl %>%
+    filter(order_date >= input$date_range[1],
+           order_date <= input$date_range[2],
+           price_euro >= input$slider_input[1],
+           price_euro <= input$slider_input[2])
+})
+
+# write bike type input as condition sting
+bike_type_condition <- reactive({
+  paste0("(", paste0(input$bike_type, collapse = "|"), ")")
+})
+
+# write bike family input as condition sting
+bike_family_condition <- reactive({
+  paste0("(", paste0(input$bike_family, collapse = "|"), ")")
+})
+
+# reactive plot
+category_plot <- reactive({plot_categories(filtered_tbl(),
+                category_1 = bike_type_condition(), 
+                category_2 = bike_family_condition(),
+                unit = "month",
+                ncol = 1, 
+                scales = "free_y", 
+                date_format = "%Y-%m-%d",
+                interactive = TRUE)})
+
+# render plot
+renderPlotly(category_plot())
+```
+
